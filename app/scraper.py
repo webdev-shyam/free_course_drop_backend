@@ -2,53 +2,115 @@ import requests
 from bs4 import BeautifulSoup
 from .database import courses_collection
 import logging
-from datetime import datetime
+import re
+import time
 
 logging.basicConfig(level=logging.INFO)
 
-def get_udemy_courses():
-    logging.info("🔍 Starting Udemy scraping...")
-    url = "https://www.udemy.com/courses/search/?price=price-free"
-    headers = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+DISCUDMY_URL = "https://www.discudemy.com/all"
+
+def extract_slug(udemy_url: str) -> str | None:
+    """
+    https://www.udemy.com/course/python-for-beginners/?couponCode=FREE
+    -> python-for-beginners
+    """
+    match = re.search(r"/course/([^/]+)/", udemy_url)
+    return match.group(1) if match else None
+
+
+def fetch_udemy_thumbnail(slug: str) -> tuple[str | None, str | None]:
+    """
+    Fetch thumbnail + category from Udemy public API
+    """
+    api_url = "https://www.udemy.com/api-2.0/courses/"
+    params = {
+        "search": slug,
+        "page_size": 1
+    }
 
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(api_url, headers=HEADERS, params=params, timeout=15)
         r.raise_for_status()
-    except requests.RequestException as e:
-        logging.error(f"Failed to fetch Udemy page: {e}")
-        return []
+        data = r.json()
+
+        if data.get("results"):
+            course = data["results"][0]
+            thumbnail = course.get("image_480x270")
+            category = course.get("primary_category", {}).get("title")
+            return thumbnail, category
+
+    except Exception as e:
+        logging.warning(f"Udemy API failed for {slug}: {e}")
+
+    return None, None
+
+
+def scrape_discudemy():
+    logging.info("🔍 Scraping DiscUdemy...")
+
+    r = requests.get(DISCUDMY_URL, headers=HEADERS, timeout=20)
+    r.raise_for_status()
 
     soup = BeautifulSoup(r.text, "html.parser")
+    cards = soup.select(".card")
 
-    # Debug logs
-    logging.info(f"HTML length: {len(r.text)}")
-    logging.info(f"Page title: {soup.title.text if soup.title else 'No title'}")
-    logging.info(f"All <a> tags found: {len(soup.find_all('a'))}")
+    new_courses = []
 
-    courses = []
+    for card in cards:
+        title_el = card.select_one(".card-header")
+        link_el = card.select_one("a")
 
-    # Scrape course links
-    for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"]
-        if "/course/" in href:
-            title_tag = a_tag.find("div")
-            img_tag = a_tag.find("img")
-            if title_tag and img_tag:
-                course_url = "https://www.udemy.com" + href.split("?")[0]
-                course = {
-                    "title": title_tag.text.strip(),
-                    "url": course_url,
-                    "couponCode": None,
-                    "thumbnail": img_tag.get("src") or "",
-                    "category": "Programming",
-                    "posted_to_telegram": False,
-                    "createdAt": datetime.utcnow()
-                }
+        if not title_el or not link_el:
+            continue
 
-                # Avoid duplicates
-                if not courses_collection.find_one({"url": course["url"]}):
-                    courses_collection.insert_one(course)
-                    courses.append(course)
+        title = title_el.text.strip()
+        discudemy_link = link_el["href"]
 
-    logging.info(f"✅ Scraping done. {len(courses)} new courses added.")
-    return courses
+        # Step 1: open DiscUdemy redirect page
+        try:
+            redirect_page = requests.get(discudemy_link, headers=HEADERS, timeout=15)
+            redirect_page.raise_for_status()
+        except:
+            continue
+
+        redirect_soup = BeautifulSoup(redirect_page.text, "html.parser")
+        udemy_btn = redirect_soup.select_one("a.btn.btn-primary")
+
+        if not udemy_btn:
+            continue
+
+        udemy_url = udemy_btn["href"]
+        slug = extract_slug(udemy_url)
+
+        if not slug:
+            continue
+
+        # Avoid duplicates early
+        if courses_collection.find_one({"url": udemy_url}):
+            continue
+
+        thumbnail, category = fetch_udemy_thumbnail(slug)
+
+        course = {
+            "title": title,
+            "url": udemy_url,
+            "thumbnail": thumbnail,
+            "category": category or "General",
+            "posted_to_telegram": False,
+            "source": "discudemy"
+        }
+
+        courses_collection.insert_one(course)
+        new_courses.append(course)
+
+        logging.info(f"✅ Added: {title}")
+
+        time.sleep(1)  # be polite
+
+    logging.info(f"🎉 Scraping finished. {len(new_courses)} new courses added.")
+    return new_courses

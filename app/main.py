@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import courses_collection
-from .scraper import get_udemy_courses
+from .scraper import scrape_discudemy
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -10,6 +10,10 @@ app = FastAPI(title="Udemy Course API", version="0.1.0")
 
 # -----------------------------
 # CORS middleware
+@app.get("/scrape")
+def scrape_now():
+    new_courses = scrape_discudemy()
+    return {"new_courses": new_courses}
 # -----------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -29,14 +33,7 @@ def health_check():
 # -----------------------------
 # Scrape now
 # -----------------------------
-@app.get("/scrape")
-def scrape_now():
-    try:
-        new_courses = get_udemy_courses()
-        return {"new_courses": new_courses}
-    except Exception as e:
-        logging.error(f"Scraping failed: {e}")
-        return {"detail": f"Scraping failed: {e}"}
+
 
 # -----------------------------
 # Get all courses
