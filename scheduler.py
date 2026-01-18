@@ -5,7 +5,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-scheduler = BlockingScheduler()
+scheduler = BlockingScheduler(timezone=pytz.UTC)
 
 # Scraper every 4 hours
 scheduler.add_job(get_udemy_courses, 'interval', hours=4, id="udemy_scraper")
