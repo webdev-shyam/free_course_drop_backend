@@ -1,14 +1,10 @@
 from pymongo import MongoClient
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+MONGO_URL = os.getenv("MONGO_URL")  # Add your connection string in Render environment
+client = MongoClient(MONGO_URL)
+db = client["udemy_courses_db"]
+courses_collection = db["courses"]
 
-MONGO_URI = os.getenv("MONGO_URI")
-
-# Connect to MongoDB Atlas
-client = MongoClient(MONGO_URI)
-db = client['udemy_courses']
-courses_collection = db['courses']
-
-print("✅ MongoDB connected successfully")
+# Optional: create unique index to prevent duplicates
+courses_collection.create_index("url", unique=True)
