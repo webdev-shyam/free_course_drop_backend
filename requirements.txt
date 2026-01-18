@@ -3,7 +3,9 @@ uvicorn
 requests
 beautifulsoup4
 python-telegram-bot==13.15
+fastapi
+uvicorn
 pymongo
-APScheduler
-python-dotenv
-pytz
+dnspython
+certifi
+requests
