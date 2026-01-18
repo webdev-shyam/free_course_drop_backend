@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import requests
 from fastapi.middleware.cors import CORSMiddleware
 from .database import courses_collection
 from .scraper import scrape_discudemy
@@ -10,10 +11,31 @@ app = FastAPI(title="Udemy Course API", version="0.1.0")
 
 # -----------------------------
 # CORS middleware
+# @app.get("/scrape")
+# def scrape_now():
+#     new_courses = scrape_discudemy()
+#     return {"new_courses": new_courses}
+
+
+app = FastAPI(title="Udemy Course API", version="0.1.0")
+
 @app.get("/scrape")
-def scrape_now():
-    new_courses = scrape_discudemy()
-    return {"new_courses": new_courses}
+def debug_scrape():
+    url = "https://www.discudemy.com/category/development"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/"
+    }
+
+    r = requests.get(url, headers=headers, timeout=30)
+
+    return {
+        "status_code": r.status_code,
+        "html_length": len(r.text),
+        "preview": r.text[:700]
+    }
 # -----------------------------
 app.add_middleware(
     CORSMiddleware,
