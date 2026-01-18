@@ -7,8 +7,10 @@ logging.basicConfig(level=logging.INFO)
 
 def get_udemy_courses():
     logging.info("🔍 Starting Udemy scraping...")
+
     url = "https://www.udemy.com/courses/search/?price=price-free"
     headers = {"User-Agent": "Mozilla/5.0"}
+
     try:
         r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
@@ -17,25 +19,35 @@ def get_udemy_courses():
         return []
 
     soup = BeautifulSoup(r.text, "html.parser")
+
+    # Debug info to verify HTML is loaded correctly
+    logging.info(f"HTML length: {len(r.text)}")
+    logging.info(f"Page title: {soup.title.text if soup.title else 'No title'}")
+    logging.info(f"All <a> tags found: {len(soup.find_all('a'))}")
+
     courses = []
 
-    for card in soup.select(".course-card--container--3w8Zm"):
-        title = card.select_one(".course-card--course-title--2f7tE")
-        link = card.select_one("a.udlite-custom-focus-visible")
-        thumbnail = card.select_one("img")
-        if title and link and thumbnail:
-            course = {
-                "title": title.text.strip(),
-                "url": "https://www.udemy.com" + link['href'],
-                "couponCode": None,
-                "thumbnail": thumbnail['src'],
-                "category": "Programming",
-                "posted_to_telegram": False
-            }
-            # Avoid duplicates
-            if not courses_collection.find_one({"url": course["url"]}):
-                courses_collection.insert_one(course)
-                courses.append(course)
+    # Udemy course links are inside <a> tags with href containing "/course/"
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"]
+        if "/course/" in href:
+            title_tag = a_tag.find("div")
+            img_tag = a_tag.find("img")
+            if title_tag and img_tag:
+                course_url = "https://www.udemy.com" + href.split("?")[0]  # remove query params
+                course = {
+                    "title": title_tag.text.strip(),
+                    "url": course_url,
+                    "couponCode": None,
+                    "thumbnail": img_tag.get("src") or "",
+                    "category": "Programming",
+                    "posted_to_telegram": False
+                }
+
+                # Avoid duplicates
+                if not courses_collection.find_one({"url": course["url"]}):
+                    courses_collection.insert_one(course)
+                    courses.append(course)
 
     logging.info(f"✅ Scraping done. {len(courses)} new courses added.")
     return courses
