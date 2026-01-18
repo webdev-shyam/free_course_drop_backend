@@ -2,6 +2,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from app.scraper import get_udemy_courses
 from app.telegram_bot import post_to_telegram
 import logging
+import pytz
 
 logging.basicConfig(level=logging.INFO)
 
